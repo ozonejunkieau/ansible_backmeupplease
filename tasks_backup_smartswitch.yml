@@ -1,0 +1,33 @@
+---
+- name: TPLINK EASY SMART SWITCH | Login to authenticate
+  ansible.builtin.uri:
+    url: http://{{ tplink_ess_host }}/logon.cgi
+    method: POST
+    body_format: form-urlencoded
+    body:
+      username: "{{ tplink_ess_username }}"
+      password: "{{ tplink_ess_password }}"
+      cpassword: ""
+      logon: Login
+  register: _tplink_auth_response
+
+- name: TPLINK EASY SMART SWITCH | Download configuration backup
+  ansible.builtin.uri:
+    url: http://{{ tplink_ess_host }}/config_back.cgi?btnBackup=Backup+Config
+    return_content: yes
+  register: _tplink_backup_response
+
+- name: TPLINK EASY SMART SWITCH | Logout
+  ansible.builtin.uri:
+    url: http://{{ tplink_ess_host }}/Logout.htm
+
+- name: TPLINK EASY SMART SWITCH | Write backup to the local storage
+  ansible.builtin.copy:
+    content: "{{ _tplink_backup_response.content }}"
+    dest: "{{ env_backup_path }}/tplink_backup-{{ tplink_ess_host | replace('.','-') }}.cfg"
+  register: tplink_file
+
+- name: TPLINK EASY SMART SWITCH | Write backup SHA1 to the local storage
+  ansible.builtin.copy:
+    content: "{{ tplink_file.checksum }}"
+    dest: "{{ env_backup_path }}/tplink_backup-{{ tplink_ess_host | replace('.','-') }}.cfg.sha1"

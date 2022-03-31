@@ -1,0 +1,80 @@
+---
+- name: PFSENSE | Build base URL
+  ansible.builtin.set_fact:
+    pfsense_baseurl: "{{ pfsense_protocol }}://{{ pfsense_host }}"
+
+- name: PFSENSE | Get Cookies & CSRF Token 1
+  ansible.builtin.uri:
+    url: "{{ pfsense_baseurl }}/diag_backup.php"
+    validate_certs: "{{ pfsense_verify_certificate }}"
+    method: GET
+    return_content: yes
+  register: pfsense_token1
+
+- name: PFSENSE | Extract CSRF Token and Cookie
+  ansible.builtin.set_fact:
+    _pfsense_csrf1: "{{ pfsense_token1.content | regex_search('var\\s+csrfMagicToken\\s+=\\s+\\\"([a-f0-9sidp:;,]+)\\\"','\\1') }}"
+    _pfsense_cookie1: "{{ pfsense_token1.set_cookie }}"
+
+- name: PFSENSE | Authenticate and fetch CSRF Token 2
+  ansible.builtin.uri:
+    url: "{{ pfsense_baseurl }}/diag_backup.php"
+    validate_certs: "{{ pfsense_verify_certificate }}"
+    follow_redirects: no
+    method: POST
+    return_content: yes
+    body_format: form-urlencoded
+    status_code: 302
+    body:
+      login: Login
+      usernamefld: "{{ pfsense_username }}"
+      passwordfld: "{{ pfsense_password }}"
+      __csrf_magic: "{{ _pfsense_csrf1 }}"
+    headers:
+      Cookie: "{{ _pfsense_cookie1 }}"
+  register: pfsense_token2
+
+- name: PFSENSE | Extract Cookie
+  ansible.builtin.set_fact:
+    _pfsense_cookie2: "{{ pfsense_token2.set_cookie }}"
+
+- name: PFSENSE | Fetch Target page for new CSRF token
+  ansible.builtin.uri:
+    url: "{{ pfsense_baseurl }}/diag_backup.php"
+    validate_certs: "{{ pfsense_verify_certificate }}"
+    follow_redirects: no
+    method: GET
+    return_content: yes
+    headers:
+      Cookie: "{{ _pfsense_cookie2 }}"
+  register: pfsense_token3
+
+- name: PFSENSE | Extract CSRF Token
+  ansible.builtin.set_fact:
+    _pfsense_csrf2: "{{ pfsense_token3.content | regex_search('var\\s+csrfMagicToken\\s+=\\s+\\\"([a-f0-9sidp:;,]+)\\\"','\\1') }}"
+
+- name: PFSENSE | Fetch configuration backup file
+  ansible.builtin.uri:
+    url: "{{ pfsense_baseurl }}/diag_backup.php"
+    validate_certs: "{{ pfsense_verify_certificate }}"
+    method: POST
+    return_content: yes
+    body_format: form-urlencoded
+    body:
+      download: download
+      donotbackuprrd: "yes"
+      __csrf_magic: "{{ _pfsense_csrf2 }}"
+    headers:
+      Cookie: "{{ pfsense_token2.set_cookie }}"
+  register: pfsense_backup
+
+- name: PFSENSE | Write backup to the local storage
+  ansible.builtin.copy:
+    content: "{{ pfsense_backup.content }}"
+    dest: "{{ env_backup_path }}/pfsense_backup-{{ pfsense_host | replace('.','-') }}.xml"
+  register: microtik_file
+
+- name: PFSENSE | Write backup SHA1 to the local storage
+  ansible.builtin.copy:
+    content: "{{ microtik_file.checksum }}"
+    dest: "{{ env_backup_path }}/pfsense_backup-{{ pfsense_host | replace('.','-') }}.xml.sha1"

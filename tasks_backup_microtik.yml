@@ -1,0 +1,19 @@
+---
+- name: MICROTIK | Download configuration backup
+  ansible.builtin.uri:
+    url: "http://{{ microtik_host }}/backup.swb"
+    url_username: "{{ microtik_username }}"
+    url_password: "{{ microtik_password }}"
+    return_content: yes
+  register: _microtik_backup_response
+
+- name: MICROTIK | Write backup to the local storage
+  ansible.builtin.copy:
+    content: "{{ _microtik_backup_response.content }}"
+    dest: "{{ env_backup_path }}/{{ microtik_backupname }}-{{ microtik_host | replace('.','-') }}.swb"
+  register: microtik_file
+
+- name: MICROTIK | Write backup SHA1 to the local storage
+  ansible.builtin.copy:
+    content: "{{ microtik_file.checksum }}"
+    dest: "{{ env_backup_path }}/{{ microtik_backupname }}-{{ microtik_host | replace('.','-') }}.swb.sha1"

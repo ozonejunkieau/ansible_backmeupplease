@@ -1,0 +1,57 @@
+---
+- name: Create local directory for storing backups
+  hosts: localhost
+  become: no
+  connection: local
+  run_once: yes
+  vars:
+    env_backup_path: /home/me/env_backup
+
+  tasks:
+    - name: Set fact for local path.
+      ansible.builtin.set_fact:
+        env_backup_path: "{{ env_backup_path }}"
+
+    - name: Ensure that backup path exists on local machine.
+      ansible.builtin.file:
+        path: "{{ env_backup_path }}"
+        state: directory
+
+
+- name: Backup Microtik SwOS Device
+  hosts: localhost
+  connection: local
+  vars:
+    microtik_username: admin
+    microtik_password: nottheadminpassword
+    microtik_host: device.example.com
+    microtik_backupname: MICROTIK
+  tasks:
+    - include_tasks: "tasks_backup_microtik.yml"
+
+- hosts: localhost
+  gather_facts: no
+  connection: local
+  vars:
+    pfsense_host: device.example.com
+    pfsense_protocol: https
+    pfsense_verify_certificate: yes
+    pfsense_username: admin
+    pfsense_password: nottheadminpassword
+  tasks:
+    - include_tasks: "tasks_backup_pfsense.yml"
+
+- hosts: localhost
+  gather_facts: no
+  connection: local
+  vars:
+    tplink_ess_hosts:
+      - device1.example.com
+      - device2.example.com
+    tplink_ess_username: admin
+    tplink_ess_password: nottheadminpassword
+  tasks:
+    - include_tasks: "tasks_backup_smartswitch.yml"
+      loop: "{{ tplink_ess_hosts }}"
+      loop_control:
+        loop_var: tplink_ess_host
